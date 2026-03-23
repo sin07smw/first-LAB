@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>전략 틱택토 - 4개 제한 모드</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+
+        .cell {
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(2rem, 10vw, 3.5rem);
+            font-weight: 900;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background-color: white;
+            border-radius: 1rem;
+            box-shadow: inset 0 0 0 2px #f3f4f6;
+        }
+
+        .cell:hover:not(.occupied) {
+            background-color: #f9fafb;
+            transform: scale(1.02);
+            box-shadow: inset 0 0 0 2px #e5e7eb;
+        }
+
+        .cell.occupied {
+            cursor: default;
+        }
+
+        .player-o { color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.2); }
+        .player-x { color: #3b82f6; text-shadow: 0 0 10px rgba(59, 130, 246, 0.2); }
+
+        /* 다음에 제거될 표식 애니메이션 */
+        @keyframes pulse-delete {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.3; transform: scale(0.9); }
+        }
+        .oldest-mark {
+            animation: pulse-delete 2s infinite ease-in-out;
+        }
+
+        .winning-cell {
+            background-color: #10b981 !important;
+            color: white !important;
+            box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.4);
+            z-index: 10;
+        }
+
+        /* 깃허브 페이지용 부드러운 페이드인 */
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="max-w-md w-full bg-white rounded-[2rem] shadow-2xl p-6 md:p-10 fade-in">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-black text-slate-800 mb-3 tracking-tight">TIC TAC TOE</h1>
+            <div class="inline-block bg-slate-100 px-4 py-1.5 rounded-full text-xs font-bold text-slate-500 uppercase tracking-widest">
+                Strategic 4-Mark Limit
+            </div>
+        </header>
+
+        <!-- 스코어 및 상태 보드 -->
+        <div class="grid grid-cols-3 gap-4 mb-8">
+            <div id="status-o" class="flex flex-col items-center p-4 rounded-2xl border-2 border-red-500 bg-red-50 transition-all duration-500">
+                <span class="text-[10px] font-black text-red-400 uppercase mb-1">Player O</span>
+                <span id="count-o" class="text-2xl font-black text-red-600 tracking-tighter text-center">0 / 4</span>
+            </div>
+            
+            <div class="flex items-center justify-center">
+                <div id="game-message" class="text-sm font-bold text-slate-600 text-center leading-tight">
+                    O의 차례입니다
+                </div>
+            </div>
+
+            <div id="status-x" class="flex flex-col items-center p-4 rounded-2xl border-2 border-transparent bg-slate-50 transition-all duration-500">
+                <span class="text-[10px] font-black text-slate-400 uppercase mb-1">Player X</span>
+                <span id="count-x" class="text-2xl font-black text-slate-400 tracking-tighter text-center">0 / 4</span>
+            </div>
+        </div>
+
+        <!-- 게임 보드 -->
+        <div id="board" class="grid grid-cols-3 gap-4 mb-8 bg-slate-100 p-4 rounded-[1.5rem]">
+            <!-- JS에서 생성 -->
+        </div>
+
+        <!-- 액션 버튼 -->
+        <div class="space-y-3">
+            <button id="reset-btn" class="w-full py-4 bg-slate-800 hover:bg-slate-950 text-white rounded-2xl font-bold transition-all active:scale-[0.98] shadow-lg shadow-slate-200">
+                게임 초기화
+            </button>
+            <p class="text-center text-[10px] text-slate-400">
+                5번째 수를 두면 가장 먼저 두었던 표식이 사라집니다.
+            </p>
+        </div>
+    </div>
+
+    <footer class="mt-8 text-slate-400 text-xs">
+        Created for GitHub Pages Deployment
+    </footer>
+
+    <script>
+        const boardElement = document.getElementById('board');
+        const messageElement = document.getElementById('game-message');
+        const resetBtn = document.getElementById('reset-btn');
+        const countOElement = document.getElementById('count-o');
+        const countXElement = document.getElementById('count-x');
+        const statusO = document.getElementById('status-o');
+        const statusX = document.getElementById('status-x');
+
+        let board = Array(9).fill(null);
+        let currentPlayer = 'O';
+        let gameActive = true;
+        
+        // 착수 기록 (큐 구조)
+        let historyO = [];
+        let historyX = [];
+
+        function createBoard() {
+            boardElement.innerHTML = '';
+            for (let i = 0; i < 9; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.setAttribute('data-index', i);
+                cell.addEventListener('click', () => handleCellClick(i));
+                boardElement.appendChild(cell);
+            }
+        }
+
+        function handleCellClick(index) {
+            if (board[index] || !gameActive) return;
+
+            // 1. 데이터 업데이트
+            board[index] = currentPlayer;
+            
+            if (currentPlayer === 'O') {
+                historyO.push(index);
+                if (historyO.length > 4) {
+                    const removed = historyO.shift();
+                    board[removed] = null;
+                }
+            } else {
+                historyX.push(index);
+                if (historyX.length > 4) {
+                    const removed = historyX.shift();
+                    board[removed] = null;
+                }
+            }
+
+            // 2. 승리 체크 전 턴 전환 및 UI 업데이트
+            // 승리 체크 로직을 위해 현재 플레이어를 유지한 상태에서 렌더링
+            render();
+            
+            if (checkWinner()) {
+                endGame();
+            } else {
+                currentPlayer = currentPlayer === 'O' ? 'X' : 'O';
+                updateStatusUI();
+                render(); // 제거 예정 힌트 갱신을 위해 재렌더링
+            }
+        }
+
+        function render() {
+            const cells = document.querySelectorAll('.cell');
+            cells.forEach((cell, i) => {
+                cell.innerText = board[i] || '';
+                
+                // 클래스 초기화 (기본 유지 클래스 제외)
+                cell.classList.remove('player-o', 'player-x', 'occupied', 'oldest-mark');
+                
+                if (board[i]) {
+                    cell.classList.add('occupied');
+                    cell.classList.add(board[i] === 'O' ? 'player-o' : 'player-x');
+                }
+
+                // 다음에 사라질 표식 힌트 (현재 턴인 사람의 가장 오래된 표식)
+                const currentHistory = (currentPlayer === 'O' ? historyO : historyX);
+                if (gameActive && currentHistory.length === 4 && currentHistory[0] === i) {
+                    cell.classList.add('oldest-mark');
+                }
+            });
+
+            countOElement.innerText = `${historyO.length} / 4`;
+            countXElement.innerText = `${historyX.length} / 4`;
+        }
+
+        function updateStatusUI() {
+            if (!gameActive) return;
+
+            messageElement.innerText = `${currentPlayer}의 차례입니다`;
+
+            if (currentPlayer === 'O') {
+                statusO.className = "flex flex-col items-center p-4 rounded-2xl border-2 border-red-500 bg-red-50 transition-all duration-500";
+                statusO.querySelector('span:first-child').classList.replace('text-slate-400', 'text-red-400');
+                statusO.querySelector('span:last-child').classList.replace('text-slate-400', 'text-red-600');
+
+                statusX.className = "flex flex-col items-center p-4 rounded-2xl border-2 border-transparent bg-slate-50 transition-all duration-500";
+                statusX.querySelector('span:first-child').classList.replace('text-blue-400', 'text-slate-400');
+                statusX.querySelector('span:last-child').classList.replace('text-blue-600', 'text-slate-400');
+            } else {
+                statusX.className = "flex flex-col items-center p-4 rounded-2xl border-2 border-blue-500 bg-blue-50 transition-all duration-500";
+                statusX.querySelector('span:first-child').classList.replace('text-slate-400', 'text-blue-400');
+                statusX.querySelector('span:last-child').classList.replace('text-slate-400', 'text-blue-600');
+
+                statusO.className = "flex flex-col items-center p-4 rounded-2xl border-2 border-transparent bg-slate-50 transition-all duration-500";
+                statusO.querySelector('span:first-child').classList.replace('text-red-400', 'text-slate-400');
+                statusO.querySelector('span:last-child').classList.replace('text-red-600', 'text-slate-400');
+            }
+        }
+
+        function checkWinner() {
+            const lines = [
+                [0, 1, 2], [3, 4, 5], [6, 7, 8],
+                [0, 3, 6], [1, 4, 7], [2, 5, 8],
+                [0, 4, 8], [2, 4, 6]
+            ];
+
+            for (let line of lines) {
+                const [a, b, c] = line;
+                if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+                    const cells = document.querySelectorAll('.cell');
+                    line.forEach(index => cells[index].classList.add('winning-cell'));
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function endGame() {
+            gameActive = false;
+            messageElement.innerHTML = `<span class="text-lg font-black ${currentPlayer === 'O' ? 'text-red-600' : 'text-blue-600'}">${currentPlayer} 승리! 🎉</span>`;
+            
+            // 승리하지 않은 표식들의 힌트 제거
+            document.querySelectorAll('.cell').forEach(c => c.classList.remove('oldest-mark'));
+        }
+
+        function resetGame() {
+            board = Array(9).fill(null);
+            historyO = [];
+            historyX = [];
+            currentPlayer = 'O';
+            gameActive = true;
+            createBoard();
+            updateStatusUI();
+            render();
+        }
+
+        resetBtn.addEventListener('click', resetGame);
+        window.onload = () => {
+            createBoard();
+            render();
+        };
+    </script>
+</body>
+</html>
