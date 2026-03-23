@@ -1,0 +1,283 @@
+import React, { useState, useMemo } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot } from 'recharts';
+import { TrendingUp, TrendingDown, Info, RefreshCw, Users, Wallet, Star, ArrowRightLeft, Target } from 'lucide-react';
+
+const App = () => {
+  const [price, setPrice] = useState(50);
+  const [demandShift, setDemandShift] = useState(0);
+  const [supplyShift, setSupplyShift] = useState(0);
+  const [activeScenario, setActiveScenario] = useState('none');
+
+  const baseDemandIntercept = 100;
+  const demandSlope = -1;
+  const baseSupplyIntercept = 0;
+  const supplySlope = 1;
+
+  // 수요 시나리오 정의
+  const scenarios = {
+    none: { label: '기본 상태', shift: 0, icon: <RefreshCw size={16} />, desc: '평범한 시장 상황입니다.' },
+    income: { label: '소득 증가', shift: 20, icon: <Wallet size={16} />, desc: '소비자들의 지갑이 두둑해져 구매력이 상승했습니다. (수요 증가)' },
+    trend: { label: '유행/인기', shift: 35, icon: <Star size={16} />, desc: 'SNS에서 화제가 되어 모두가 이 물건을 갖고 싶어 합니다. (수요 증가)' },
+    substitute: { label: '대체재 가격 하락', shift: -20, icon: <ArrowRightLeft size={16} />, desc: '비슷한 다른 물건의 가격이 낮아져 손님을 뺏겼습니다. (수요 감소)' },
+    population: { label: '인구 감소', shift: -25, icon: <Users size={16} />, desc: '시장의 소비자 수 자체가 줄어들어 구매량이 감소했습니다. (수요 감소)' },
+  };
+
+  const handleScenarioChange = (key) => {
+    setActiveScenario(key);
+    setDemandShift(scenarios[key].shift);
+  };
+
+  // 그래프 데이터 생성
+  const data = useMemo(() => {
+    const points = [];
+    for (let p = 0; p <= 110; p += 5) {
+      points.push({
+        price: p,
+        demand: Math.max(0, (baseDemandIntercept + demandShift) + (demandSlope * p)),
+        supply: Math.max(0, (baseSupplyIntercept + supplyShift) + (supplySlope * p)),
+      });
+    }
+    return points;
+  }, [demandShift, supplyShift]);
+
+  // 현재 수량 계산
+  const currentDemand = Math.max(0, (baseDemandIntercept + demandShift) + (demandSlope * price));
+  const currentSupply = Math.max(0, (baseSupplyIntercept + supplyShift) + (supplySlope * price));
+  
+  // 균형점 계산
+  const equilibriumPrice = ((baseDemandIntercept + demandShift) - (baseSupplyIntercept + supplyShift)) / (supplySlope - demandSlope);
+  const equilibriumQuantity = (baseSupplyIntercept + supplyShift) + (supplySlope * equilibriumPrice);
+
+  const getMarketStatus = () => {
+    const diff = currentDemand - currentSupply;
+    if (diff > 0.5) return { text: "초과 수요 (품절 위기)", color: "bg-red-50 text-red-700 border-red-200", icon: <TrendingUp className="text-red-500" /> };
+    if (diff < -0.5) return { text: "초과 공급 (재고 누적)", color: "bg-blue-50 text-blue-700 border-blue-200", icon: <TrendingDown className="text-blue-500" /> };
+    return { text: "시장 균형 달성", color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: <Target className="text-emerald-500" /> };
+  };
+
+  const status = getMarketStatus();
+
+  return (
+    <div className="flex flex-col min-h-screen bg-slate-50 font-sans text-slate-900">
+      {/* 글로벌 내비게이션 바 스타일 헤더 */}
+      <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="bg-indigo-600 p-1.5 rounded-lg text-white">
+              <TrendingUp size={20} />
+            </div>
+            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-indigo-400">
+              EconSim: 수요와 공급
+            </h1>
+          </div>
+          <div className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-500">
+            <span className="hover:text-indigo-600 cursor-pointer">학습 모드</span>
+            <span className="hover:text-indigo-600 cursor-pointer">시나리오</span>
+            <a href="https://github.com" target="_blank" rel="noreferrer" className="bg-slate-900 text-white px-4 py-2 rounded-full text-xs transition hover:bg-slate-700">
+              GitHub 저장소
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto w-full p-4 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* 사이드바: 컨트롤 패널 */}
+        <div className="lg:col-span-4 space-y-6">
+          <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+            <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800">
+              🛠️ 시장 제어판
+            </h2>
+
+            {/* 가격 슬라이더 */}
+            <div className="mb-8 p-5 bg-slate-50 rounded-2xl border border-slate-100 transition-all hover:border-indigo-200 group">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">시장 판매 가격</span>
+                <span className="text-2xl font-black text-indigo-600 group-hover:scale-110 transition-transform">${price}</span>
+              </div>
+              <input 
+                type="range" min="0" max="100" step="1" 
+                value={price} 
+                onChange={(e) => setPrice(Number(e.target.value))}
+                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 mt-2 font-bold uppercase">
+                <span>Low</span>
+                <span>High</span>
+              </div>
+            </div>
+
+            {/* 시나리오 버튼 인터페이스 */}
+            <div className="space-y-4">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                <Users size={14} /> 수요 변화 원인 (Demand Shift)
+              </label>
+              <div className="grid grid-cols-1 gap-2">
+                {Object.entries(scenarios).map(([key, scenario]) => (
+                  <button
+                    key={key}
+                    onClick={() => handleScenarioChange(key)}
+                    className={`flex items-center gap-3 p-3 rounded-xl border text-sm transition-all duration-200 ${
+                      activeScenario === key 
+                      ? 'bg-pink-500 text-white border-pink-600 shadow-md ring-2 ring-pink-200' 
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-pink-300 hover:bg-pink-50'
+                    }`}
+                  >
+                    <span className={`p-1.5 rounded-lg ${activeScenario === key ? 'bg-white/20' : 'bg-pink-50 text-pink-500'}`}>
+                      {scenario.icon}
+                    </span>
+                    <span className="font-semibold">{scenario.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                <p className="text-xs text-indigo-700 leading-relaxed">
+                   <strong>상황:</strong> {scenarios[activeScenario].desc}
+                </p>
+              </div>
+            </div>
+
+            {/* 공급 생산성 */}
+            <div className="mt-8 pt-6 border-t border-slate-100">
+              <div className="flex justify-between items-center mb-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">생산 기술력 (공급 능력)</label>
+                <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${supplyShift >= 0 ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                  {supplyShift > 0 ? '+' : ''}{supplyShift}
+                </span>
+              </div>
+              <input 
+                type="range" min="-40" max="40" step="10" 
+                value={supplyShift} 
+                onChange={(e) => setSupplyShift(Number(e.target.value))}
+                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              />
+            </div>
+          </section>
+
+          {/* 지표 섹션 */}
+          <section className={`p-6 rounded-3xl border shadow-sm transition-all duration-300 ${status.color}`}>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-1.5 bg-white/50 rounded-lg">{status.icon}</div>
+              <h3 className="font-bold text-lg">{status.text}</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white/40 p-3 rounded-2xl">
+                <p className="text-[10px] uppercase font-bold opacity-60 mb-1">수요량</p>
+                <p className="text-xl font-black">{currentDemand.toFixed(0)}개</p>
+              </div>
+              <div className="bg-white/40 p-3 rounded-2xl">
+                <p className="text-[10px] uppercase font-bold opacity-60 mb-1">공급량</p>
+                <p className="text-xl font-black">{currentSupply.toFixed(0)}개</p>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-black/5 flex justify-between items-center">
+              <span className="text-xs font-bold opacity-60 uppercase">시장 불균형 정도</span>
+              <span className="text-sm font-black">{Math.abs(currentDemand - currentSupply).toFixed(0)} 단위</span>
+            </div>
+          </section>
+        </div>
+
+        {/* 메인 컨텐츠: 그래프 시각화 */}
+        <div className="lg:col-span-8 space-y-6">
+          <section className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 flex flex-col h-full min-h-[550px]">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 tracking-tight">시장 균형 메커니즘</h2>
+                <p className="text-slate-400 text-sm mt-1 font-medium">실시간 데이터 시각화 시뮬레이션</p>
+              </div>
+              <div className="flex bg-slate-50 p-1.5 rounded-xl gap-2 border border-slate-100">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white shadow-sm border border-slate-200">
+                  <div className="w-2.5 h-2.5 rounded-full bg-pink-500" />
+                  <span className="text-[11px] font-bold text-slate-600 uppercase">수요 (D)</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white shadow-sm border border-slate-200">
+                  <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                  <span className="text-[11px] font-bold text-slate-600 uppercase">공급 (S)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-grow w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data} layout="vertical" margin={{ top: 10, right: 40, left: 10, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={true} />
+                  <XAxis 
+                    type="number" 
+                    domain={[0, 150]} 
+                    tick={{fontSize: 11, fill: '#94a3b8'}}
+                    axisLine={{stroke: '#e2e8f0'}}
+                    label={{ value: '수량 (Quantity)', position: 'insideBottom', offset: -10, fontSize: 12, fontWeight: 700, fill: '#64748b' }} 
+                  />
+                  <YAxis 
+                    type="number" 
+                    dataKey="price" 
+                    domain={[0, 100]} 
+                    tick={{fontSize: 11, fill: '#94a3b8'}}
+                    axisLine={{stroke: '#e2e8f0'}}
+                    label={{ value: '가격 (Price)', angle: -90, position: 'insideLeft', fontSize: 12, fontWeight: 700, fill: '#64748b' }} 
+                  />
+                  <Tooltip 
+                    cursor={{ stroke: '#e2e8f0', strokeWidth: 1 }}
+                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', padding: '12px' }}
+                    formatter={(value) => [`${value.toFixed(0)} 단위`, '']}
+                  />
+                  
+                  {/* 곡선 렌더링 */}
+                  <Line type="monotone" dataKey="demand" stroke="#ec4899" strokeWidth={5} dot={false} isAnimationActive={true} animationDuration={500} />
+                  <Line type="monotone" dataKey="supply" stroke="#3b82f6" strokeWidth={5} dot={false} isAnimationActive={true} animationDuration={500} />
+
+                  {/* 보조선 및 점 */}
+                  <ReferenceLine y={price} stroke="#6366f1" strokeDasharray="6 4" strokeWidth={2} />
+                  
+                  <ReferenceDot x={currentDemand} y={price} r={7} fill="#ec4899" stroke="#fff" strokeWidth={3} />
+                  <ReferenceDot x={currentSupply} y={price} r={7} fill="#3b82f6" stroke="#fff" strokeWidth={3} />
+                  
+                  {/* 균형점 */}
+                  <ReferenceDot 
+                    x={equilibriumQuantity} 
+                    y={equilibriumPrice} 
+                    r={9} 
+                    fill="#10b981" 
+                    stroke="#fff" 
+                    strokeWidth={4}
+                    label={{ position: 'top', value: 'Market Equilibrium', fill: '#059669', fontSize: 11, fontWeight: 800, offset: 15 }} 
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="mt-8 flex flex-col md:flex-row gap-6">
+              <div className="flex-1 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-2 mb-2 text-indigo-600">
+                  <Info size={18} />
+                  <h4 className="font-bold text-sm">균형 가격 (Equilibrium Price)</h4>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  수요자와 공급자의 의사가 일치하는 지점으로, 현재 시장 조건에서 가장 이상적인 가격은 <span className="text-indigo-600 font-bold">${equilibriumPrice.toFixed(1)}</span> 입니다.
+                </p>
+              </div>
+              <div className="flex-1 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-2 mb-2 text-emerald-600">
+                  <Target size={18} />
+                  <h4 className="font-bold text-sm">시장 조정 과정</h4>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  {price > equilibriumPrice 
+                    ? "현재 가격이 균형보다 높습니다. 공급이 과잉되어 가격 하락 압력이 발생합니다." 
+                    : "현재 가격이 균형보다 낮습니다. 물건이 부족하여 가격 상승 압력이 발생합니다."}
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer className="max-w-7xl mx-auto w-full px-8 py-10 text-center text-slate-400 text-xs border-t border-slate-200 mt-auto">
+        <p>© 2024 Economics Interactive Lab. Built for educational purposes.</p>
+        <p className="mt-2 font-medium">React + Recharts + Tailwind CSS</p>
+      </footer>
+    </div>
+  );
+};
+
+export default App;
